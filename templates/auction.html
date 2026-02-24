@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IPL Auction 2026</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial; margin: 0; padding: 20px; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .player-info, .bidding, .teams { border: 1px solid #ccc; padding: 20px; }
+        .bid-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .bid-btn { padding: 10px; font-size: 14px; }
+        .bid-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .control-btn { padding: 15px 30px; margin: 10px; font-size: 16px; }
+        .auctioneer-only { display: none; }
+        .leader-glow { border: 3px solid #00ff00; box-shadow: 0 0 10px #00ff00; }
+        .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .team-card { border: 1px solid #ddd; padding: 15px; }
+    </style>
+</head>
+<body>
+    <h1>🏏 IPL Auction 2026 - {{ role|title }}</h1>
+    
+    <div id="ui-message" style="display: none; padding: 10px; background: #ffeb3b; margin-bottom: 10px;"></div>
+    
+    <div class="container">
+        <!-- Player Info -->
+        <div class="player-info">
+            <h2>Current Player</h2>
+            <div id="player-details">No player loaded</div>
+        </div>
+        
+        <!-- Bidding Section -->
+        <div class="bidding">
+            <h2>Live Bidding</h2>
+            <p><strong>Current Bid:</strong> ₹<span id="current-bid">0</span> Cr</p>
+            <p><strong>Leader:</strong> <span id="leader">-</span></p>
+            
+            <div class="bid-buttons" id="bid-buttons">
+                <!-- Team buttons will be populated by JavaScript -->
+            </div>
+            
+            <div class="auctioneer-only">
+                <button class="control-btn" onclick="undoBid()">↶ Undo Bid</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Teams Display -->
+    <div class="teams">
+        <h2>Team Status</h2>
+        <div class="teams-grid" id="teams-grid">
+            <!-- Teams will be populated by JavaScript -->
+        </div>
+    </div>
+    
+    <!-- Auctioneer Controls -->
+    <div class="auctioneer-only" id="auctioneer-controls">
+        <button class="control-btn" onclick="nextPlayer()" style="background: #4CAF50; color: white;">
+            ▶ Next Player
+        </button>
+        <button class="control-btn" onclick="resetAuction()" style="background: #f44336; color: white;">
+            🔄 Reset Auction
+        </button>
+    </div>
+
+    <script>
+        const socket = io();
+        const isAuctioneer = "{{ role }}" === "auctioneer";
+        
+        // Show auctioneer controls
+        if (isAuctioneer) {
+            document.querySelectorAll('.auctioneer-only').forEach(el => {
+                el.style.display = 'block';
+            });
+        }
+        
+        socket.on('auction_update', function(data) {
+            updatePlayerInfo(data.player);
+            updateBidding(data.current_bid, data.leader);
+            updateTeams(data.teams);
+            updateBidButtons(data.teams, data.player);
+            
+            if (data.ui_message) {
+                showMessage(data.ui_message);
+            }
+        });
+        
+        socket.on('error', function(data) {
+            alert(data.message);
+        });
+        
+        function updatePlayerInfo(player) {
+            const playerDetails = document.getElementById('player-details');
+            if (player) {
+                playerDetails.innerHTML = `
+                    <p><strong>Name:</strong> ${player.Name}</p>
+                    <p><strong>Team:</strong> ${player.Team}</p>
+                    <p><strong>Role:</strong> ${player.Role}</p>
+                    <p><strong>Nationality:</strong> ${player.Nationality}</p>
+                    <p><strong>Base Price:</strong> ₹${player['Base Price']} Cr</p>
+                    <p><strong>Status:</strong> ${player.Uncapped === 'Y' ? 'Uncapped 🟢' : 'Capped 🔵'}</p>
+                `;
+            } else {
+                playerDetails.innerHTML = 'No player available';
+            }
+        }
+        
+        function updateBidding(bid, leader) {
+            document.getElementById('current-bid').textContent = bid || 0;
+            document.getElementById('leader').textContent = leader || '-';
+        }
+        
+        function updateBidButtons(teams, player) {
+            const container = document.getElementById('bid-buttons');
+            container.innerHTML = '';
+            
+            teams.forEach(team => {
+                const button = document.createElement('button');
+                button.textContent = team.name;
+                button.className = 'bid-btn';
+                button.disabled = !isAuctioneer; // Only auctioneer can bid
+                
+                if (team.is_leader) {
+                    button.style.backgroundColor = '#4CAF50';
+                    button.style.color = 'white';
+                }
+                
+                button.onclick = () => placeBid(team.name);
+                container.appendChild(button);
+            });
+        }
+        
+        function updateTeams(teams) {
+            const container = document.getElementById('teams-grid');
+            container.innerHTML = '';
+            
+            teams.forEach(team => {
+                const div = document.createElement('div');
+                div.className = 'team-card';
+                if (team.is_leader) {
+                    div.classList.add('leader-glow');
+                }
+                
+                div.innerHTML = `
+                    <h4>🏏 ${team.name}</h4>
+                    <p><strong>Players:</strong> ${team.players}/15</p>
+                    <p><strong>Spent:</strong> ₹${team.spent} Cr</p>
+                    <p style="color: ${team.purse < 24 ? 'red' : 'green'}">
+                        <strong>Remaining:</strong> ₹${team.purse} Cr
+                    </p>
+                    <p><strong>Overseas:</strong> ${team.overseas}/6</p>
+                    <p><strong>Roles:</strong> Bat:${team.roles.Bat} Bowl:${team.roles.Bowl} AR:${team.roles.AR} WK:${team.roles.WK}</p>
+                `;
+                
+                container.appendChild(div);
+            });
+        }
+        
+        function placeBid(teamName) {
+            socket.emit('place_bid', { team: teamName });
+        }
+        
+        function undoBid() {
+            socket.emit('undo_bid');
+        }
+        
+        function nextPlayer() {
+            socket.emit('next_player');
+        }
+        
+        function resetAuction() {
+            if (confirm('Are you sure you want to reset the auction?')) {
+                socket.emit('reset_auction');
+            }
+        }
+        
+        function showMessage(message) {
+            const messageEl = document.getElementById('ui-message');
+            messageEl.textContent = message;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
