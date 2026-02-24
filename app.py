@@ -240,6 +240,27 @@ def handle_undo_bid():
         else: auction_state["leader"],auction_state["bid"]=None,0
         broadcast_auction_update()
 
+@socketio.on('undo_next_player')
+def handle_undo_next_player():
+    if session.get('role') != 'auctioneer':
+        emit('error', {'message': 'Only auctioneer can undo next player'})
+        return
+    
+    if auction_state["next_history"]:
+        snap = auction_state["next_history"].pop()
+        auction_state["lot_idx"] = snap["lot_idx"]
+        auction_state["player_idx"] = snap["player_idx"]
+        auction_state["phase"] = snap["phase"]
+        auction_state["bid"] = snap["bid"]
+        auction_state["leader"] = snap["leader"]
+        auction_state["history"] = snap["history"]
+        auction_state["teams"] = snap["teams"]
+        auction_state["unsold"] = snap["unsold"]
+
+        auction_state["ui_message"] = "Reverted to previous player"
+        auction_state["ui_message_time"] = time.time()
+        broadcast_auction_update()
+
 @socketio.on('next_player')
 def handle_next_player():
     if session.get('role')!='auctioneer': emit('error',{'message':'Only auctioneer can advance'}); return

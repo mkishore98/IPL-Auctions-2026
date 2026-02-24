@@ -57,6 +57,7 @@
     <button class="control-btn" onclick="nextPlayer()" style="background: #4CAF50; color:white;">▶ Next Player</button>
     <button class="control-btn" onclick="resetAuction()" style="background:#f44336; color:white;">🔄 Reset Auction</button>
     <button class="control-btn" onclick="downloadSummary()" style="background:#2196F3; color:white;">💾 Download Summary</button>
+    <button class="control-btn" onclick="undoNextPlayer()" style="background:#ff9800; color:white;">⬅ Undo Next Player</button>
 </div>
 
 <script>
@@ -140,6 +141,9 @@ function updateTeams(teams){
 function placeBid(team){ socket.emit('place_bid',{team}); }
 function undoBid(){ socket.emit('undo_bid'); }
 function nextPlayer(){ socket.emit('next_player'); }
+function undoNextPlayer(){
+    socket.emit('undo_next_player');
+}
 function resetAuction(){ if(confirm('Reset auction?')) socket.emit('reset_auction'); }
 function downloadSummary(){ socket.emit('request_summary'); }
 
