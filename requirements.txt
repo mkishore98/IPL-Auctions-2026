@@ -1,12 +1,13 @@
-streamlit==1.38.0
-pandas
-numpy
-pillow
-openpyxl
-streamlit
-streamlit-autorefresh
+# Core Flask + SocketIO (no streamlit needed)
 Flask==2.3.3
 Flask-SocketIO==5.3.6
-pandas==2.0.3
-python-socketio==5.8.0
-eventlet==0.33.3
+eventlet==0.36.1
+gunicorn==22.0.0
+
+# Data (stable wheels)
+pandas==2.1.4
+numpy==1.26.4
+openpyxl==3.1.2
+
+# Pin Python (Render default)
+python==3.12.7
