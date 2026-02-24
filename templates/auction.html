@@ -4,26 +4,41 @@
     <title>IPL Auction 2026</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { font-family: Arial; margin: 0; padding: 20px; }
+        body { font-family: Arial; margin: 0; padding: 20px; background:#1e1e1e; color:#f1f1f1; }
         .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .player-info, .bidding, .teams, .team-detail { border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        .player-info, .bidding, .teams, .team-detail { border: 1px solid #555; padding: 20px; border-radius: 8px; background:#2c2c2c; }
         .bid-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;}
-        .bid-btn { padding: 10px; font-size: 14px; border-radius:5px;}
+        .bid-btn { padding: 10px; font-size: 14px; border-radius:5px; background:#444; color:#fff; border:none; cursor:pointer;}
         .bid-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .control-btn { padding: 15px 30px; margin: 10px; font-size: 16px; border-radius:5px; cursor:pointer;}
         .auctioneer-only { display: none; }
         .leader-glow { border: 3px solid #00ff00; box-shadow: 0 0 15px #00ff00; }
         .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top:10px;}
-        .team-card { border:1px solid #ddd; padding:10px; border-radius:8px;}
-        .progress-container { background:#eee; width:100%; border-radius:5px; margin-bottom:5px; }
+        .team-card { border:1px solid #555; padding:10px; border-radius:8px; background:#2a2a2a;}
+        .progress-container { background:#555; width:100%; border-radius:5px; margin-bottom:5px; }
         .progress-bar { height:15px; border-radius:5px; background:#4CAF50; text-align:right; padding-right:5px; color:white; font-size:12px;}
-        #ui-message { display:none; padding:10px; background:#ffeb3b; margin-bottom:10px; border-radius:5px;}
+        #ui-message { display:none; padding:10px; background:#ffeb3b; color:#000; margin-bottom:10px; border-radius:5px;}
         .warning-msg { color:red; font-weight:bold; font-size:14px; margin-top:5px;}
+        .alert-info { background:#2196F3; color:#fff; padding:10px; margin-bottom:10px; border-radius:5px;}
+        .alert-warning { background:#ff9800; color:#000; padding:10px; margin-bottom:10px; border-radius:5px;}
     </style>
 </head>
 <body>
 <h1>🏏 IPL Auction 2026 - {{ role|title }}</h1>
 <div id="ui-message"></div>
+
+<!-- CURRENT LOT FULL WIDTH -->
+<div id="current-lot">
+    {% if phase == 'LOTS' %}
+    <div class="alert-info">
+        <strong>Current Lot:</strong> {{ lots[lot_idx]['name'] }}
+    </div>
+    {% else %}
+    <div class="alert-warning">
+        Unsold Auction Phase
+    </div>
+    {% endif %}
+</div>
 
 <div class="container">
     <!-- Player Info -->
@@ -72,6 +87,10 @@ socket.on('auction_update', function(data){
     updateBidButtons(data.teams, data.player);
 
     if(data.ui_message) showMessage(data.ui_message);
+    // Update current lot dynamically
+    const lotEl = document.getElementById('current-lot');
+    if(data.phase=='LOTS') lotEl.innerHTML = `<div class="alert-info"><strong>Current Lot:</strong> ${data.lot_info}</div>`;
+    else lotEl.innerHTML = `<div class="alert-warning">Unsold Auction Phase</div>`;
 });
 
 socket.on('download_csv', function(csv){
@@ -141,9 +160,7 @@ function updateTeams(teams){
 function placeBid(team){ socket.emit('place_bid',{team}); }
 function undoBid(){ socket.emit('undo_bid'); }
 function nextPlayer(){ socket.emit('next_player'); }
-function undoNextPlayer(){
-    socket.emit('undo_next_player');
-}
+function undoNextPlayer(){ socket.emit('undo_next_player'); }
 function resetAuction(){ if(confirm('Reset auction?')) socket.emit('reset_auction'); }
 function downloadSummary(){ socket.emit('request_summary'); }
 
