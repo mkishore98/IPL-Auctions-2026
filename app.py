@@ -18,9 +18,9 @@ TEAM_SIZE = 15
 PURSE = 120
 ROLE_MIN = {"Bat":4, "Bowl":4, "AR":2, "WK":1}
 TEAM_NAMES = [
-    "Chennai Super Kings", "Mumbai Indians", "Royal Challengers Bangalore",
-    "Kolkata Knight Riders", "Delhi Capitals", "Rajasthan Royals", 
-    "Sunrisers Hyderabad", "Punjab Kings"
+    "DRS", "12 Angry Men", "Athaamle Vargeesu",
+    "Lollipop XV", "Singapore Chithaps", "Forever Mama XV", 
+    "Overdraft XV"
 ]
 TEAM_COUNT = len(TEAM_NAMES)
 
@@ -86,9 +86,10 @@ def initialize_auction():
         })
 
 def bid_increment(bid):
-    if bid < 8: return 0.5
-    if bid < 12: return 0.75
-    return 1
+    if bid < 8: 
+        return 0.5
+    else:
+        return 1
 
 def role_counts(team):
     counts = {"Bat":0,"Bowl":0,"AR":0,"WK":0}

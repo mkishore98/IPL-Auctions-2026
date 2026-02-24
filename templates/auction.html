@@ -10,7 +10,7 @@
         .bid-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;}
         .bid-btn { padding: 10px; font-size: 14px; border-radius:5px; background:#444; color:#fff; border:none; cursor:pointer;}
         .bid-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .control-btn { padding: 15px 30px; margin: 10px; font-size: 16px; border-radius:5px; cursor:pointer;}
+        .control-btn { padding: 15px 30px; margin: 10px 0; font-size: 16px; border-radius:5px; cursor:pointer;}
         .auctioneer-only { display: none; }
         .leader-glow { border: 3px solid #00ff00; box-shadow: 0 0 15px #00ff00; }
         .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top:10px;}
@@ -55,9 +55,13 @@
 
         <div class="bid-buttons" id="bid-buttons"></div>
 
+        <!-- Auctioneer-only undo bid -->
         <div class="auctioneer-only">
             <button class="control-btn" onclick="undoBid()">↶ Undo Bid</button>
         </div>
+
+        <!-- Download Summary for all users -->
+        <button class="control-btn" onclick="downloadSummary()" style="background:#2196F3; color:white;">💾 Download Summary</button>
     </div>
 </div>
 
@@ -71,7 +75,6 @@
 <div class="auctioneer-only" id="auctioneer-controls">
     <button class="control-btn" onclick="nextPlayer()" style="background: #4CAF50; color:white;">▶ Next Player</button>
     <button class="control-btn" onclick="resetAuction()" style="background:#f44336; color:white;">🔄 Reset Auction</button>
-    <button class="control-btn" onclick="downloadSummary()" style="background:#2196F3; color:white;">💾 Download Summary</button>
     <button class="control-btn" onclick="undoNextPlayer()" style="background:#ff9800; color:white;">⬅ Undo Next Player</button>
 </div>
 
@@ -87,6 +90,7 @@ socket.on('auction_update', function(data){
     updateBidButtons(data.teams, data.player);
 
     if(data.ui_message) showMessage(data.ui_message);
+
     // Update current lot dynamically
     const lotEl = document.getElementById('current-lot');
     if(data.phase=='LOTS') lotEl.innerHTML = `<div class="alert-info"><strong>Current Lot:</strong> ${data.lot_info}</div>`;
