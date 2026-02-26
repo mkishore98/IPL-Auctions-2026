@@ -98,7 +98,6 @@ def role_counts(team):
     return counts
 
 def can_bid(team, player, team_name, leader):
-    # Purse check
     if team["purse"] < player["Base Price"]:
         return False, "Insufficient Purse"
     if leader == team_name:
@@ -114,8 +113,6 @@ def can_bid(team, player, team_name, leader):
     current_uncapped = team["uncapped"]
     if remaining==1 and current_uncapped==0 and player["Uncapped"]!="Y":
         return False, "Fill Uncapped Quota"
-
-    # Role minimum checks
     new_bat = rc["Bat"] + (1 if player["Role"]=="Bat" else 0)
     new_bowl = rc["Bowl"] + (1 if player["Role"]=="Bowl" else 0)
     new_ar = rc["AR"] + (1 if player["Role"]=="AR" else 0)
@@ -133,15 +130,19 @@ def can_bid(team, player, team_name, leader):
     return True, ""
 
 def current_player():
-    if auction_state["phase"]=="LOTS":
-        if auction_state["lot_idx"]<len(auction_state["lots"]):
+    if auction_state["phase"] == "LOTS":
+        if auction_state["lot_idx"] < len(auction_state["lots"]):
             lot = auction_state["lots"][auction_state["lot_idx"]]["data"]
-            if auction_state["player_idx"]<len(lot):
+            if auction_state["player_idx"] < len(lot):
                 return lot[auction_state["player_idx"]]
-    else:
-        if auction_state["player_idx"]<len(auction_state["unsold"]):
-            return auction_state["unsold"][auction_state["player_idx"]]
-    return None
+        return None
+    else:  # UNSOLD phase
+        if not auction_state["unsold"]:
+            return None
+        # Clamp index in case list shrank
+        if auction_state["player_idx"] >= len(auction_state["unsold"]):
+            auction_state["player_idx"] = 0
+        return auction_state["unsold"][auction_state["player_idx"]]
 
 def assign_player(team_name, player):
     t = auction_state["teams"][team_name]
@@ -159,8 +160,11 @@ def assign_player(team_name, player):
     if player["Nationality"]=="Overseas":
         t["overseas"] += 1
     if player["Uncapped"]=="Y":
-        t["uncapped"] +=1
-    t["ipl"][player["Team"]] +=1
+        t["uncapped"] += 1
+    t["ipl"][player["Team"]] += 1
+
+def all_teams_full():
+    return all(len(t["players"]) >= TEAM_SIZE for t in auction_state["teams"].values())
 
 def broadcast_auction_update():
     player = current_player()
@@ -177,13 +181,23 @@ def broadcast_auction_update():
             "roles": rc,
             "is_leader": auction_state["leader"]==tname
         })
+
+    # Safe lot_info — during UNSOLD phase lot_idx may be out of range
+    if auction_state["phase"] == "LOTS" and auction_state["lot_idx"] < len(auction_state["lots"]):
+        lot_info = auction_state["lots"][auction_state["lot_idx"]]["name"]
+    elif auction_state["lots"]:
+        lot_info = auction_state["lots"][-1]["name"]
+    else:
+        lot_info = ""
+
     data = {
         "player": player,
         "current_bid": auction_state["bid"],
         "leader": auction_state["leader"],
         "teams": teams,
         "phase": auction_state["phase"],
-        "lot_info": auction_state["lots"][auction_state["lot_idx"]]["name"] if auction_state["lots"] else "",
+        "lot_info": lot_info,
+        "unsold_count": len(auction_state["unsold"]),
         "ui_message": auction_state.get("ui_message")
     }
     socketio.emit('auction_update', data, room='auction')
@@ -191,62 +205,68 @@ def broadcast_auction_update():
 # ---------------- ROUTES ----------------
 @app.route('/')
 def index(): return render_template('role_select.html')
+
 @app.route('/auctioneer')
 def auctioneer():
-    session['role']='auctioneer'; session['user_id']=str(uuid.uuid4())
+    session['role'] = 'auctioneer'; session['user_id'] = str(uuid.uuid4())
     initialize_auction()
     return render_template('auction.html', role='auctioneer')
+
 @app.route('/player')
 def player():
-    session['role']='player'; session['user_id']=str(uuid.uuid4())
+    session['role'] = 'player'; session['user_id'] = str(uuid.uuid4())
     initialize_auction()
     return render_template('auction.html', role='player')
 
 # ---------------- SOCKET EVENTS ----------------
 @socketio.on('connect')
 def on_connect():
-    user_id=session.get('user_id'); role=session.get('role','player')
+    user_id = session.get('user_id'); role = session.get('role', 'player')
     if user_id:
         connected_users[user_id] = {'role': role, 'session_id': request.sid}
         join_room('auction')
         broadcast_auction_update()
-        emit('user_connected', {'role':role, 'total_users':len(connected_users)}, room='auction')
+        emit('user_connected', {'role': role, 'total_users': len(connected_users)}, room='auction')
 
 @socketio.on('disconnect')
 def on_disconnect():
-    user_id=session.get('user_id')
-    if user_id in connected_users: del connected_users[user_id]; leave_room('auction')
+    user_id = session.get('user_id')
+    if user_id in connected_users:
+        del connected_users[user_id]
+        leave_room('auction')
 
 @socketio.on('place_bid')
 def handle_bid(data):
-    if session.get('role')!='auctioneer': emit('error',{'message':'Only auctioneer can control bidding'}); return
-    team_name=data.get('team'); player=current_player()
+    if session.get('role') != 'auctioneer':
+        emit('error', {'message': 'Only auctioneer can control bidding'}); return
+    team_name = data.get('team'); player = current_player()
     if not player: return
-    team=auction_state["teams"][team_name]
-    ok,msg=can_bid(team,player,team_name,auction_state["leader"])
+    team = auction_state["teams"][team_name]
+    ok, msg = can_bid(team, player, team_name, auction_state["leader"])
     if ok:
-        new_bid = player["Base Price"] if auction_state["bid"]==0 else auction_state["bid"]+bid_increment(auction_state["bid"])
-        if new_bid<=team["purse"]:
-            auction_state["bid"]=new_bid
-            auction_state["leader"]=team_name
-            auction_state["history"].append((team_name,new_bid))
+        new_bid = player["Base Price"] if auction_state["bid"] == 0 else auction_state["bid"] + bid_increment(auction_state["bid"])
+        if new_bid <= team["purse"]:
+            auction_state["bid"] = new_bid
+            auction_state["leader"] = team_name
+            auction_state["history"].append((team_name, new_bid))
             broadcast_auction_update()
 
 @socketio.on('undo_bid')
 def handle_undo_bid():
-    if session.get('role')!='auctioneer': emit('error',{'message':'Only auctioneer can undo bids'}); return
+    if session.get('role') != 'auctioneer':
+        emit('error', {'message': 'Only auctioneer can undo bids'}); return
     if auction_state["history"]:
         auction_state["history"].pop()
-        if auction_state["history"]: auction_state["leader"],auction_state["bid"]=auction_state["history"][-1]
-        else: auction_state["leader"],auction_state["bid"]=None,0
+        if auction_state["history"]:
+            auction_state["leader"], auction_state["bid"] = auction_state["history"][-1]
+        else:
+            auction_state["leader"], auction_state["bid"] = None, 0
         broadcast_auction_update()
 
 @socketio.on('undo_next_player')
 def handle_undo_next_player():
     if session.get('role') != 'auctioneer':
-        emit('error', {'message': 'Only auctioneer can undo next player'})
-        return
-    
+        emit('error', {'message': 'Only auctioneer can undo next player'}); return
     if auction_state["next_history"]:
         snap = auction_state["next_history"].pop()
         auction_state["lot_idx"] = snap["lot_idx"]
@@ -257,7 +277,6 @@ def handle_undo_next_player():
         auction_state["history"] = snap["history"]
         auction_state["teams"] = snap["teams"]
         auction_state["unsold"] = snap["unsold"]
-
         auction_state["ui_message"] = "Reverted to previous player"
         auction_state["ui_message_time"] = time.time()
         broadcast_auction_update()
@@ -265,11 +284,13 @@ def handle_undo_next_player():
 @socketio.on('next_player')
 def handle_next_player():
     if session.get('role') != 'auctioneer':
-        emit('error', {'message': 'Only auctioneer can advance'})
-        return
-    player = current_player()
-    if not player: return
+        emit('error', {'message': 'Only auctioneer can advance'}); return
 
+    player = current_player()
+    if not player:
+        return
+
+    # Save snapshot BEFORE making any changes (for undo)
     auction_state["next_history"].append({
         "lot_idx": auction_state["lot_idx"],
         "player_idx": auction_state["player_idx"],
@@ -281,59 +302,84 @@ def handle_next_player():
         "unsold": copy.deepcopy(auction_state["unsold"])
     })
 
+    # ---- Step 1: Resolve current player (sold or unsold) ----
     if auction_state["leader"]:
+        # Player is SOLD
         assign_player(auction_state["leader"], player)
+
         if auction_state["phase"] == "UNSOLD":
-            # Remove sold player from unsold list
+            # Remove this player from the unsold list — they've been sold now
+            # Don't increment player_idx; the next player slides into this index position
             auction_state["unsold"].pop(auction_state["player_idx"])
     else:
+        # Player is UNSOLD
         if auction_state["phase"] == "LOTS":
+            # Add to unsold pool for later
             auction_state["unsold"].append(player)
             auction_state["ui_message"] = f"{player['Name']} moved to Unsold List"
             auction_state["ui_message_time"] = time.time()
-        # In UNSOLD phase, if nobody bids, player stays in unsold list — just advance index
+        else:
+            # Already in unsold list and still nobody bid — just move to next
+            # (player stays in unsold list to be cycled again)
+            auction_state["player_idx"] += 1
 
+    # Reset bid state
     auction_state["bid"] = 0
     auction_state["leader"] = None
     auction_state["history"] = []
 
+    # ---- Step 2: Advance to next player ----
     if auction_state["phase"] == "LOTS":
         auction_state["player_idx"] += 1
-        if auction_state["player_idx"] >= len(auction_state["lots"][auction_state["lot_idx"]]["data"]):
+        current_lot_data = auction_state["lots"][auction_state["lot_idx"]]["data"]
+
+        if auction_state["player_idx"] >= len(current_lot_data):
+            # Move to next lot
             auction_state["lot_idx"] += 1
             auction_state["player_idx"] = 0
+
             if auction_state["lot_idx"] >= len(auction_state["lots"]):
-                # All lots done — move to unsold phase
+                # All lots exhausted — switch to UNSOLD phase
                 auction_state["phase"] = "UNSOLD"
                 auction_state["player_idx"] = 0
+                if auction_state["unsold"]:
+                    auction_state["ui_message"] = f"All lots done! {len(auction_state['unsold'])} unsold players up for re-auction."
+                    auction_state["ui_message_time"] = time.time()
 
     else:  # UNSOLD phase
-        all_full = all(len(t["players"]) >= TEAM_SIZE for t in auction_state["teams"].values())
-        if all_full or len(auction_state["unsold"]) == 0:
-            auction_state["ui_message"] = "🏆 Auction Complete!"
+        # Check if auction is complete
+        if all_teams_full():
+            auction_state["ui_message"] = "🏆 Auction Complete! All teams have full squads."
             auction_state["ui_message_time"] = time.time()
-        else:
-            # Cycle through unsold list, wrapping around
-            # If a player was sold (popped), index stays — points to next player naturally
-            # If player was skipped (nobody bid), advance index
-            if not auction_state["leader"]:  # nobody bought, advance
-                auction_state["player_idx"] += 1
-            if auction_state["player_idx"] >= len(auction_state["unsold"]):
-                auction_state["player_idx"] = 0  # wrap around, keep cycling
+            broadcast_auction_update()
+            return
+
+        if not auction_state["unsold"]:
+            auction_state["ui_message"] = "🏆 Auction Complete! No more unsold players."
+            auction_state["ui_message_time"] = time.time()
+            broadcast_auction_update()
+            return
+
+        # Wrap around the unsold list so it cycles continuously
+        if auction_state["player_idx"] >= len(auction_state["unsold"]):
+            auction_state["player_idx"] = 0
 
     broadcast_auction_update()
 
 @socketio.on('reset_auction')
 def handle_reset():
-    if session.get('role')!='auctioneer': emit('error',{'message':'Only auctioneer can reset auction'}); return
-    auction_state["initialized"]=False; initialize_auction(); broadcast_auction_update()
+    if session.get('role') != 'auctioneer':
+        emit('error', {'message': 'Only auctioneer can reset auction'}); return
+    auction_state["initialized"] = False
+    initialize_auction()
+    broadcast_auction_update()
 
 @socketio.on('request_summary')
 def handle_summary():
-    rows=[]
-    for tname,t in auction_state["teams"].items():
+    rows = []
+    for tname, t in auction_state["teams"].items():
         for p in t["players"]:
-            rows.append({"Auction Team":tname, **p})
+            rows.append({"Auction Team": tname, **p})
     si = io.StringIO()
     writer = csv.DictWriter(si, fieldnames=rows[0].keys() if rows else [])
     writer.writeheader(); writer.writerows(rows)
