@@ -140,14 +140,17 @@
 const socket = io();
 const isAuctioneer = "{{ role }}" === "auctioneer";
 let auctioneerUnlocked = false;
+let lastTeamsData = [];
+let lastPlayerData = null;
 
-// Show auctioneer-only elements only after password unlock
 function unlockAuctioneer() {
     auctioneerUnlocked = true;
     document.querySelectorAll('.auctioneer-only').forEach(el => el.style.display = 'block');
     const statusEl = document.getElementById('auctioneer-status');
     if (statusEl) statusEl.textContent = '✅ Auctioneer controls active';
     if (statusEl) statusEl.style.color = '#4CAF50';
+    // Re-render bid buttons now that auctioneerUnlocked is true
+    updateBidButtons(lastTeamsData, lastPlayerData);
 }
 
 function submitPassword() {
@@ -167,6 +170,8 @@ socket.on('password_result', function(data) {
 });
 
 socket.on('auction_update', function(data) {
+    lastTeamsData = data.teams;
+    lastPlayerData = data.player;
     updatePlayerInfo(data.player);
     updateBidding(data.current_bid, data.leader);
     updateTeams(data.teams);
