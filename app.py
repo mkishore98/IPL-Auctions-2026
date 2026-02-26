@@ -267,14 +267,37 @@ def handle_bid(data):
     team_name = data.get('team'); player = current_player()
     if not player: return
     team = auction_state["teams"][team_name]
+
+    # Acceleration: auctioneer manually specified a bid amount
+    acceleration = data.get('acceleration')
+    if acceleration is not None:
+        try:
+            acceleration = float(acceleration)
+        except (ValueError, TypeError):
+            acceleration = None
+
     ok, msg = can_bid(team, player, team_name, auction_state["leader"])
     if ok:
-        new_bid = player["Base Price"] if auction_state["bid"] == 0 else auction_state["bid"] + bid_increment(auction_state["bid"])
-        if new_bid <= team["purse"]:
-            auction_state["bid"] = new_bid
-            auction_state["leader"] = team_name
-            auction_state["history"].append((team_name, new_bid))
-            broadcast_auction_update()
+        if acceleration is not None and acceleration > 0:
+            # Use acceleration value directly — must be >= base price and <= purse
+            if acceleration < player["Base Price"]:
+                emit('error', {'message': f'Acceleration bid ₹{acceleration}Cr is below base price ₹{player["Base Price"]}Cr'})
+                return
+            if acceleration > team["purse"]:
+                emit('error', {'message': f'Acceleration bid ₹{acceleration}Cr exceeds team purse ₹{team["purse"]}Cr'})
+                return
+            if acceleration <= auction_state["bid"]:
+                emit('error', {'message': f'Acceleration bid ₹{acceleration}Cr must be higher than current bid ₹{auction_state["bid"]}Cr'})
+                return
+            new_bid = acceleration
+        else:
+            new_bid = player["Base Price"] if auction_state["bid"] == 0 else auction_state["bid"] + bid_increment(auction_state["bid"])
+            if new_bid > team["purse"]:
+                return
+        auction_state["bid"] = new_bid
+        auction_state["leader"] = team_name
+        auction_state["history"].append((team_name, new_bid))
+        broadcast_auction_update()
 
 @socketio.on('undo_bid')
 def handle_undo_bid():

@@ -114,6 +114,17 @@
         <p><strong>Current Bid:</strong> ₹<span id="current-bid">0</span> Cr</p>
         <p><strong>Leader:</strong> <span id="leader">-</span></p>
 
+        <!-- Acceleration bid -->
+        <div class="auctioneer-only" style="margin-bottom:10px; display:flex; align-items:center; gap:10px;">
+            <label style="font-weight:bold; white-space:nowrap;">⚡ Acceleration (₹ Cr):</label>
+            <input type="number" id="acceleration-input" min="0" step="0.5"
+                placeholder="e.g. 10"
+                style="width:100px; padding:8px; font-size:16px; border-radius:5px; border:2px solid #ff9800;
+                       background:#1e1e1e; color:#fff; text-align:center;">
+            <button onclick="clearAcceleration()"
+                style="padding:8px 12px; background:#555; color:#fff; border:none; border-radius:5px; cursor:pointer;">✕ Clear</button>
+        </div>
+
         <div class="bid-buttons" id="bid-buttons"></div>
 
         <div class="auctioneer-only">
@@ -266,7 +277,19 @@ function updateTeams(teams) {
     });
 }
 
-function placeBid(team) { socket.emit('place_bid', { team }); }
+function placeBid(team) {
+    const accInput = document.getElementById('acceleration-input');
+    const accValue = accInput ? parseFloat(accInput.value) : NaN;
+    const payload = { team };
+    if (!isNaN(accValue) && accValue > 0) {
+        payload.acceleration = accValue;
+    }
+    socket.emit('place_bid', payload);
+}
+function clearAcceleration() {
+    const el = document.getElementById('acceleration-input');
+    if (el) el.value = '';
+}
 function undoBid() { socket.emit('undo_bid'); }
 function nextPlayer() { socket.emit('next_player'); }
 function undoNextPlayer() { socket.emit('undo_next_player'); }
