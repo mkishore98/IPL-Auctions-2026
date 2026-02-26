@@ -284,12 +284,37 @@ def handle_next_player():
             auction_state["ui_message"]=f"{player['Name']} moved to Unsold List"; auction_state["ui_message_time"]=time.time()
     auction_state["bid"]=0; auction_state["leader"]=None; auction_state["history"]=[]
     auction_state["player_idx"]+=1
-    if auction_state["phase"]=="LOTS":
-        if auction_state["player_idx"]>=len(auction_state["lots"][auction_state["lot_idx"]]["data"]):
-            auction_state["lot_idx"]+=1; auction_state["player_idx"]=0
-            if auction_state["lot_idx"]>=len(auction_state["lots"]): auction_state["phase"]="UNSOLD"; auction_state["player_idx"]=0
+
+    if auction_state["phase"] == "LOTS":
+        if auction_state["player_idx"] >= len(auction_state["lots"][auction_state["lot_idx"]]["data"]):
+            auction_state["lot_idx"] += 1
+            auction_state["player_idx"] = 0
+
+            # All lots finished → move to UNSOLD
+            if auction_state["lot_idx"] >= len(auction_state["lots"]):
+                auction_state["phase"] = "UNSOLD"
+                auction_state["player_idx"] = 0
+
+                # If no unsold players exist, end auction
+                if not auction_state["unsold"]:
+                    auction_state["ui_message"] = "Auction Completed - No Unsold Players"
+                    auction_state["ui_message_time"] = time.time()
     else:
-        if auction_state["player_idx"]>=len(auction_state["unsold"]): auction_state["player_idx"]=0
+        # UNSOLD PHASE
+        if auction_state["player_idx"] >= len(auction_state["unsold"]):
+            # Check if all teams full
+            all_full = all(
+                len(t["players"]) >= TEAM_SIZE 
+                for t in auction_state["teams"].values()
+             )
+
+            if all_full:
+                auction_state["ui_message"] = "Auction Completed - All Teams Full"
+                auction_state["ui_message_time"] = time.time()
+                return
+            else:
+                # Restart unsold round again
+                auction_state["player_idx"] = 0
     broadcast_auction_update()
 
 @socketio.on('reset_auction')
