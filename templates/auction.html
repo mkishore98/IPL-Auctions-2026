@@ -50,6 +50,25 @@
     <!-- Bidding Section -->
     <div class="bidding">
         <h2>Live Bidding</h2>
+
+        <!-- Top Auction Controls -->
+         <div class="auctioneer-only" style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="control-btn"
+                    onclick="nextPlayer()"
+                    style="background:#4CAF50; color:white;">
+                ▶ Next Player
+
+            </button>
+
+            <button class="control-btn"
+                    onclick="undoNextPlayer()"
+                    style="background:#ff9800; color:white;">
+                ⬅ Undo Next Player
+            </button>
+
+
+         </div>
+        
         <p><strong>Current Bid:</strong> ₹<span id="current-bid">0</span> Cr</p>
         <p><strong>Leader:</strong> <span id="leader">-</span></p>
 
@@ -73,9 +92,7 @@
 
 <!-- Auctioneer Controls -->
 <div class="auctioneer-only" id="auctioneer-controls">
-    <button class="control-btn" onclick="nextPlayer()" style="background: #4CAF50; color:white;">▶ Next Player</button>
     <button class="control-btn" onclick="resetAuction()" style="background:#f44336; color:white;">🔄 Reset Auction</button>
-    <button class="control-btn" onclick="undoNextPlayer()" style="background:#ff9800; color:white;">⬅ Undo Next Player</button>
 </div>
 
 <script>
