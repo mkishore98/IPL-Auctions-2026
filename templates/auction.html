@@ -10,34 +10,85 @@
         .bid-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;}
         .bid-btn { padding: 10px; font-size: 14px; border-radius:5px; background:#444; color:#fff; border:none; cursor:pointer;}
         .bid-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .control-btn { padding: 15px 30px; margin: 10px 0; font-size: 16px; border-radius:5px; cursor:pointer;}
+        .control-btn { padding: 15px 30px; margin: 10px 0; font-size: 16px; border-radius:5px; cursor:pointer; border:none;}
         .auctioneer-only { display: none; }
         .leader-glow { border: 3px solid #00ff00; box-shadow: 0 0 15px #00ff00; }
         .teams-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top:10px;}
         .team-card { border:1px solid #555; padding:10px; border-radius:8px; background:#2a2a2a;}
         .progress-container { background:#555; width:100%; border-radius:5px; margin-bottom:5px; }
         .progress-bar { height:15px; border-radius:5px; background:#4CAF50; text-align:right; padding-right:5px; color:white; font-size:12px;}
-        #ui-message { display:none; padding:10px; background:#ffeb3b; color:#000; margin-bottom:10px; border-radius:5px;}
+        #ui-message { display:none; padding:10px; background:#ffeb3b; color:#000; margin-bottom:10px; border-radius:5px; font-weight:bold;}
         .warning-msg { color:red; font-weight:bold; font-size:14px; margin-top:5px;}
-        .alert-info { background:#2196F3; color:#fff; padding:10px; margin-bottom:10px; border-radius:5px;}
-        .alert-warning { background:#ff9800; color:#000; padding:10px; margin-bottom:10px; border-radius:5px;}
+        .alert-info { background:#2196F3; color:#fff; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; align-items:center; justify-content:space-between;}
+        .alert-warning { background:#ff9800; color:#000; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; align-items:center; justify-content:space-between;}
+        .lot-progress-badge { background:rgba(255,255,255,0.25); padding:3px 10px; border-radius:12px; font-weight:bold; font-size:15px; letter-spacing:1px;}
+        .unsold-badge { background:rgba(0,0,0,0.2); padding:3px 10px; border-radius:12px; font-weight:bold; font-size:15px;}
+
+        /* Per-team download button */
+        .download-team-btn { padding:5px 10px; font-size:12px; border-radius:4px; background:#1565C0; color:#fff; border:none; cursor:pointer; margin-top:6px; width:100%;}
+        .download-team-btn:hover { background:#1976D2; }
+
+        /* Password Modal */
+        #password-modal {
+            display: none;
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        #password-modal.active { display: flex; }
+        .modal-box {
+            background: #2c2c2c;
+            border: 2px solid #ff5722;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            min-width: 320px;
+        }
+        .modal-box h2 { color: #ff5722; margin-bottom: 20px; }
+        .modal-box input {
+            width: 100%; padding: 12px; font-size: 18px;
+            border-radius: 6px; border: 1px solid #555;
+            background: #1e1e1e; color: #fff;
+            text-align: center; letter-spacing: 4px;
+            box-sizing: border-box; margin-bottom: 15px;
+        }
+        .modal-box button {
+            padding: 12px 30px; font-size: 16px;
+            background: #ff5722; color: white;
+            border: none; border-radius: 6px; cursor: pointer; width: 100%;
+        }
+        .modal-box button:hover { background: #e64a19; }
+        #password-error { color: #ff4444; margin-top: 10px; display: none; font-weight: bold;}
+        #auctioneer-status { font-size: 13px; color: #aaa; margin-bottom: 8px; }
     </style>
 </head>
 <body>
+
+<!-- PASSWORD MODAL (auctioneer only) -->
+{% if role == 'auctioneer' %}
+<div id="password-modal" class="active">
+    <div class="modal-box">
+        <h2>🔐 Auctioneer Access</h2>
+        <p style="color:#ccc; margin-bottom:20px;">Enter password to unlock auctioneer controls</p>
+        <input type="password" id="password-input" placeholder="Password" onkeydown="if(event.key==='Enter') submitPassword()">
+        <button onclick="submitPassword()">Unlock</button>
+        <div id="password-error">❌ Incorrect password. Try again.</div>
+    </div>
+</div>
+{% endif %}
+
 <h1>🏏 IPL Auction 2026 - {{ role|title }}</h1>
+{% if role == 'auctioneer' %}
+<div id="auctioneer-status">🔒 Auctioneer controls locked</div>
+{% endif %}
 <div id="ui-message"></div>
 
 <!-- CURRENT LOT FULL WIDTH -->
 <div id="current-lot">
-    {% if phase == 'LOTS' %}
     <div class="alert-info">
-        <strong>Current Lot:</strong> {{ lots[lot_idx]['name'] }}
+        <strong>Loading...</strong>
     </div>
-    {% else %}
-    <div class="alert-warning">
-        Unsold Auction Phase
-    </div>
-    {% endif %}
 </div>
 
 <div class="container">
@@ -51,36 +102,26 @@
     <div class="bidding">
         <h2>Live Bidding</h2>
 
-        <!-- Top Auction Controls -->
-         <div class="auctioneer-only" style="display:flex; gap:10px; margin-bottom:15px;">
-            <button class="control-btn"
-                    onclick="nextPlayer()"
-                    style="background:#4CAF50; color:white;">
+        <div class="auctioneer-only" style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="control-btn" onclick="nextPlayer()" style="background:#4CAF50; color:white;">
                 ▶ Next Player
-
             </button>
-
-            <button class="control-btn"
-                    onclick="undoNextPlayer()"
-                    style="background:#ff9800; color:white;">
+            <button class="control-btn" onclick="undoNextPlayer()" style="background:#ff9800; color:white;">
                 ⬅ Undo Next Player
             </button>
+        </div>
 
-
-         </div>
-        
         <p><strong>Current Bid:</strong> ₹<span id="current-bid">0</span> Cr</p>
         <p><strong>Leader:</strong> <span id="leader">-</span></p>
 
         <div class="bid-buttons" id="bid-buttons"></div>
 
-        <!-- Auctioneer-only undo bid -->
         <div class="auctioneer-only">
-            <button class="control-btn" onclick="undoBid()">↶ Undo Bid</button>
+            <button class="control-btn" onclick="undoBid()" style="background:#555; color:white;">↶ Undo Bid</button>
         </div>
 
-        <!-- Download Summary for all users -->
-        <button class="control-btn" onclick="downloadSummary()" style="background:#2196F3; color:white;">💾 Download Summary</button>
+        <!-- Download ALL summary -->
+        <button class="control-btn" onclick="downloadSummary(null)" style="background:#2196F3; color:white;">💾 Download Full Summary</button>
     </div>
 </div>
 
@@ -90,7 +131,7 @@
     <div class="teams-grid" id="teams-grid"></div>
 </div>
 
-<!-- Auctioneer Controls -->
+<!-- Auctioneer Reset -->
 <div class="auctioneer-only" id="auctioneer-controls">
     <button class="control-btn" onclick="resetAuction()" style="background:#f44336; color:white;">🔄 Reset Auction</button>
 </div>
@@ -98,96 +139,141 @@
 <script>
 const socket = io();
 const isAuctioneer = "{{ role }}" === "auctioneer";
-if(isAuctioneer) document.querySelectorAll('.auctioneer-only').forEach(el=>el.style.display='block');
+let auctioneerUnlocked = false;
 
-socket.on('auction_update', function(data){
+// Show auctioneer-only elements only after password unlock
+function unlockAuctioneer() {
+    auctioneerUnlocked = true;
+    document.querySelectorAll('.auctioneer-only').forEach(el => el.style.display = 'block');
+    const statusEl = document.getElementById('auctioneer-status');
+    if (statusEl) statusEl.textContent = '✅ Auctioneer controls active';
+    if (statusEl) statusEl.style.color = '#4CAF50';
+}
+
+function submitPassword() {
+    const pw = document.getElementById('password-input').value;
+    socket.emit('verify_password', { password: pw });
+}
+
+socket.on('password_result', function(data) {
+    if (data.success) {
+        document.getElementById('password-modal').classList.remove('active');
+        unlockAuctioneer();
+    } else {
+        document.getElementById('password-error').style.display = 'block';
+        document.getElementById('password-input').value = '';
+        document.getElementById('password-input').focus();
+    }
+});
+
+socket.on('auction_update', function(data) {
     updatePlayerInfo(data.player);
     updateBidding(data.current_bid, data.leader);
     updateTeams(data.teams);
     updateBidButtons(data.teams, data.player);
+    if (data.ui_message) showMessage(data.ui_message);
 
-    if(data.ui_message) showMessage(data.ui_message);
-
-    // Update current lot dynamically
+    // Update lot banner with progress
     const lotEl = document.getElementById('current-lot');
-    if(data.phase=='LOTS') lotEl.innerHTML = `<div class="alert-info"><strong>Current Lot:</strong> ${data.lot_info}</div>`;
-    else lotEl.innerHTML = `<div class="alert-warning">Unsold Auction Phase</div>`;
+    if (data.phase == 'LOTS') {
+        lotEl.innerHTML = `<div class="alert-info">
+            <span><strong>Current Lot:</strong> ${data.lot_info}</span>
+            <span class="lot-progress-badge">${data.lot_progress}</span>
+        </div>`;
+    } else {
+        lotEl.innerHTML = `<div class="alert-warning">
+            <span>🔄 Unsold Auction Phase</span>
+            <span class="unsold-badge">${data.unsold_current}/${data.unsold_count} unsold</span>
+        </div>`;
+    }
 });
 
-socket.on('download_csv', function(csv){
-    const blob = new Blob([csv], {type:'text/csv'});
+socket.on('download_csv', function(data) {
+    const blob = new Blob([data.csv], { type: 'text/csv' });
     const link = document.createElement('a');
-    link.href=URL.createObjectURL(blob);
-    link.download='auction_summary.csv';
+    link.href = URL.createObjectURL(blob);
+    link.download = data.filename;
     link.click();
 });
 
-function updatePlayerInfo(player){
-    const container=document.getElementById('player-details');
-    if(player){
-        container.innerHTML=`
+socket.on('error', function(data) {
+    showMessage('⚠️ ' + data.message);
+});
+
+function updatePlayerInfo(player) {
+    const container = document.getElementById('player-details');
+    if (player) {
+        container.innerHTML = `
             <p><strong>Name:</strong> ${player.Name}</p>
             <p><strong>Team:</strong> ${player.Team}</p>
             <p><strong>Role:</strong> ${player.Role}</p>
             <p><strong>Nationality:</strong> ${player.Nationality}</p>
             <p><strong>Base Price:</strong> ₹${player['Base Price']} Cr</p>
-            <p><strong>Status:</strong> ${player.Uncapped==='Y'?'Uncapped 🟢':'Capped 🔵'}</p>
+            <p><strong>Status:</strong> ${player.Uncapped === 'Y' ? 'Uncapped 🟢' : 'Capped 🔵'}</p>
         `;
-    } else container.innerHTML='No player available';
+    } else {
+        container.innerHTML = 'No player available';
+    }
 }
 
-function updateBidding(bid, leader){
-    document.getElementById('current-bid').textContent=bid||0;
-    document.getElementById('leader').textContent=leader||'-';
+function updateBidding(bid, leader) {
+    document.getElementById('current-bid').textContent = bid || 0;
+    document.getElementById('leader').textContent = leader || '-';
 }
 
-function updateBidButtons(teams, player){
-    const container=document.getElementById('bid-buttons');
-    container.innerHTML='';
-    teams.forEach(team=>{
-        const btn=document.createElement('button');
-        btn.textContent=team.name;
-        btn.className='bid-btn';
-        btn.disabled=!isAuctioneer;
-        if(team.is_leader){ btn.style.backgroundColor='#4CAF50'; btn.style.color='white'; }
-        btn.onclick=()=>placeBid(team.name);
+function updateBidButtons(teams, player) {
+    const container = document.getElementById('bid-buttons');
+    container.innerHTML = '';
+    teams.forEach(team => {
+        const btn = document.createElement('button');
+        btn.textContent = team.name;
+        btn.className = 'bid-btn';
+        // Disable if not auctioneer OR auctioneer not unlocked yet
+        btn.disabled = !isAuctioneer || !auctioneerUnlocked;
+        if (team.is_leader) { btn.style.backgroundColor = '#4CAF50'; btn.style.color = 'white'; }
+        btn.onclick = () => placeBid(team.name);
         container.appendChild(btn);
     });
 }
 
-function updateTeams(teams){
-    const container=document.getElementById('teams-grid');
-    container.innerHTML='';
-    teams.forEach(team=>{
-        const div=document.createElement('div'); div.className='team-card';
-        if(team.is_leader) div.classList.add('leader-glow');
-        const squad_pct = Math.round((team.players/15)*100);
-        div.innerHTML=`
+function updateTeams(teams) {
+    const container = document.getElementById('teams-grid');
+    container.innerHTML = '';
+    teams.forEach(team => {
+        const div = document.createElement('div');
+        div.className = 'team-card';
+        if (team.is_leader) div.classList.add('leader-glow');
+        const squad_pct = Math.round((team.players / 15) * 100);
+        div.innerHTML = `
             <h4>🏏 ${team.name}</h4>
             <div class="progress-container"><div class="progress-bar" style="width:${squad_pct}%;background:#2196F3;">${team.players}/15</div></div>
             <p><strong>Spent:</strong> ₹${team.spent} Cr</p>
-            <p style="color:${team.purse<24?'red':'green'}"><strong>Remaining:</strong> ₹${team.purse} Cr</p>
+            <p style="color:${team.purse < 24 ? 'red' : 'green'}"><strong>Remaining:</strong> ₹${team.purse} Cr</p>
             <p><strong>Overseas:</strong> ${team.overseas}/6 | Uncapped: ${team.uncapped}/1</p>
             <div><strong>Roles:</strong></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.Bat/4,1)*100}%;">Bat ${team.roles.Bat}/4</div></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.Bowl/4,1)*100}%;">Bowl ${team.roles.Bowl}/4</div></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.AR/2,1)*100}%;">AR ${team.roles.AR}/2</div></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.WK/1,1)*100}%;">WK ${team.roles.WK}/1</div></div>
+            <button class="download-team-btn" onclick="downloadSummary('${team.name}')">💾 Download ${team.name}</button>
         `;
         container.appendChild(div);
     });
 }
 
-function placeBid(team){ socket.emit('place_bid',{team}); }
-function undoBid(){ socket.emit('undo_bid'); }
-function nextPlayer(){ socket.emit('next_player'); }
-function undoNextPlayer(){ socket.emit('undo_next_player'); }
-function resetAuction(){ if(confirm('Reset auction?')) socket.emit('reset_auction'); }
-function downloadSummary(){ socket.emit('request_summary'); }
+function placeBid(team) { socket.emit('place_bid', { team }); }
+function undoBid() { socket.emit('undo_bid'); }
+function nextPlayer() { socket.emit('next_player'); }
+function undoNextPlayer() { socket.emit('undo_next_player'); }
+function resetAuction() { if (confirm('Reset auction? This cannot be undone.')) socket.emit('reset_auction'); }
+function downloadSummary(team) { socket.emit('request_summary', { team: team }); }
 
-function showMessage(msg){
-    const el=document.getElementById('ui-message'); el.textContent=msg; el.style.display='block';
-    setTimeout(()=>{el.style.display='none';},4000);
+function showMessage(msg) {
+    const el = document.getElementById('ui-message');
+    el.textContent = msg;
+    el.style.display = 'block';
+    clearTimeout(el._timeout);
+    el._timeout = setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 </script>
 </body>

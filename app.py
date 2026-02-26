@@ -24,6 +24,9 @@ TEAM_NAMES = [
 ]
 TEAM_COUNT = len(TEAM_NAMES)
 
+# ---------------- AUCTIONEER PASSWORD ----------------
+AUCTIONEER_PASSWORD = "OCaptainMyCaptain"  # Change this to your desired password
+
 # ---------------- GLOBAL STATE ----------------
 auction_state = {
     "lots": [],
@@ -86,7 +89,7 @@ def initialize_auction():
         })
 
 def bid_increment(bid):
-    if bid < 8: 
+    if bid < 8:
         return 0.5
     else:
         return 1
@@ -139,7 +142,6 @@ def current_player():
     else:  # UNSOLD phase
         if not auction_state["unsold"]:
             return None
-        # Clamp index in case list shrank
         if auction_state["player_idx"] >= len(auction_state["unsold"]):
             auction_state["player_idx"] = 0
         return auction_state["unsold"][auction_state["player_idx"]]
@@ -182,13 +184,23 @@ def broadcast_auction_update():
             "is_leader": auction_state["leader"]==tname
         })
 
-    # Safe lot_info — during UNSOLD phase lot_idx may be out of range
+    # Lot info with progress counter
     if auction_state["phase"] == "LOTS" and auction_state["lot_idx"] < len(auction_state["lots"]):
-        lot_info = auction_state["lots"][auction_state["lot_idx"]]["name"]
+        current_lot = auction_state["lots"][auction_state["lot_idx"]]
+        lot_name = current_lot["name"]
+        lot_total = len(current_lot["data"])
+        lot_current = min(auction_state["player_idx"] + 1, lot_total)
+        lot_info = lot_name
+        lot_progress = f"{lot_current}/{lot_total}"
     elif auction_state["lots"]:
         lot_info = auction_state["lots"][-1]["name"]
+        lot_progress = ""
     else:
         lot_info = ""
+        lot_progress = ""
+
+    unsold_total = len(auction_state["unsold"])
+    unsold_current = (auction_state["player_idx"] % unsold_total + 1) if unsold_total > 0 else 0
 
     data = {
         "player": player,
@@ -197,7 +209,9 @@ def broadcast_auction_update():
         "teams": teams,
         "phase": auction_state["phase"],
         "lot_info": lot_info,
-        "unsold_count": len(auction_state["unsold"]),
+        "lot_progress": lot_progress,
+        "unsold_count": unsold_total,
+        "unsold_current": unsold_current,
         "ui_message": auction_state.get("ui_message")
     }
     socketio.emit('auction_update', data, room='auction')
@@ -235,10 +249,21 @@ def on_disconnect():
         del connected_users[user_id]
         leave_room('auction')
 
+@socketio.on('verify_password')
+def handle_verify_password(data):
+    password = data.get('password', '')
+    if password == AUCTIONEER_PASSWORD:
+        session['auctioneer_verified'] = True
+        emit('password_result', {'success': True})
+    else:
+        emit('password_result', {'success': False, 'message': 'Incorrect password'})
+
 @socketio.on('place_bid')
 def handle_bid(data):
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can control bidding'}); return
+    if not session.get('auctioneer_verified'):
+        emit('error', {'message': 'Auctioneer not verified'}); return
     team_name = data.get('team'); player = current_player()
     if not player: return
     team = auction_state["teams"][team_name]
@@ -255,6 +280,8 @@ def handle_bid(data):
 def handle_undo_bid():
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can undo bids'}); return
+    if not session.get('auctioneer_verified'):
+        emit('error', {'message': 'Auctioneer not verified'}); return
     if auction_state["history"]:
         auction_state["history"].pop()
         if auction_state["history"]:
@@ -267,6 +294,8 @@ def handle_undo_bid():
 def handle_undo_next_player():
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can undo next player'}); return
+    if not session.get('auctioneer_verified'):
+        emit('error', {'message': 'Auctioneer not verified'}); return
     if auction_state["next_history"]:
         snap = auction_state["next_history"].pop()
         auction_state["lot_idx"] = snap["lot_idx"]
@@ -285,12 +314,13 @@ def handle_undo_next_player():
 def handle_next_player():
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can advance'}); return
+    if not session.get('auctioneer_verified'):
+        emit('error', {'message': 'Auctioneer not verified'}); return
 
     player = current_player()
     if not player:
         return
 
-    # Save snapshot BEFORE making any changes (for undo)
     auction_state["next_history"].append({
         "lot_idx": auction_state["lot_idx"],
         "player_idx": auction_state["player_idx"],
@@ -302,25 +332,17 @@ def handle_next_player():
         "unsold": copy.deepcopy(auction_state["unsold"])
     })
 
-    # ---- Step 1: Resolve current player (sold or unsold) ----
+    # ---- Step 1: Resolve current player ----
     if auction_state["leader"]:
-        # Player is SOLD
         assign_player(auction_state["leader"], player)
-
         if auction_state["phase"] == "UNSOLD":
-            # Remove this player from the unsold list — they've been sold now
-            # Don't increment player_idx; the next player slides into this index position
             auction_state["unsold"].pop(auction_state["player_idx"])
     else:
-        # Player is UNSOLD
         if auction_state["phase"] == "LOTS":
-            # Add to unsold pool for later
             auction_state["unsold"].append(player)
             auction_state["ui_message"] = f"{player['Name']} moved to Unsold List"
             auction_state["ui_message_time"] = time.time()
         else:
-            # Already in unsold list and still nobody bid — just move to next
-            # (player stays in unsold list to be cycled again)
             auction_state["player_idx"] += 1
 
     # Reset bid state
@@ -328,39 +350,30 @@ def handle_next_player():
     auction_state["leader"] = None
     auction_state["history"] = []
 
-    # ---- Step 2: Advance to next player ----
+    # ---- Step 2: Advance ----
     if auction_state["phase"] == "LOTS":
         auction_state["player_idx"] += 1
         current_lot_data = auction_state["lots"][auction_state["lot_idx"]]["data"]
-
         if auction_state["player_idx"] >= len(current_lot_data):
-            # Move to next lot
             auction_state["lot_idx"] += 1
             auction_state["player_idx"] = 0
-
             if auction_state["lot_idx"] >= len(auction_state["lots"]):
-                # All lots exhausted — switch to UNSOLD phase
                 auction_state["phase"] = "UNSOLD"
                 auction_state["player_idx"] = 0
                 if auction_state["unsold"]:
                     auction_state["ui_message"] = f"All lots done! {len(auction_state['unsold'])} unsold players up for re-auction."
                     auction_state["ui_message_time"] = time.time()
-
-    else:  # UNSOLD phase
-        # Check if auction is complete
+    else:
         if all_teams_full():
             auction_state["ui_message"] = "🏆 Auction Complete! All teams have full squads."
             auction_state["ui_message_time"] = time.time()
             broadcast_auction_update()
             return
-
         if not auction_state["unsold"]:
             auction_state["ui_message"] = "🏆 Auction Complete! No more unsold players."
             auction_state["ui_message_time"] = time.time()
             broadcast_auction_update()
             return
-
-        # Wrap around the unsold list so it cycles continuously
         if auction_state["player_idx"] >= len(auction_state["unsold"]):
             auction_state["player_idx"] = 0
 
@@ -370,20 +383,29 @@ def handle_next_player():
 def handle_reset():
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can reset auction'}); return
+    if not session.get('auctioneer_verified'):
+        emit('error', {'message': 'Auctioneer not verified'}); return
     auction_state["initialized"] = False
     initialize_auction()
     broadcast_auction_update()
 
 @socketio.on('request_summary')
-def handle_summary():
+def handle_summary(data=None):
+    """Download summary - all teams or a specific team"""
+    team_filter = data.get('team') if data else None
     rows = []
     for tname, t in auction_state["teams"].items():
+        if team_filter and tname != team_filter:
+            continue
         for p in t["players"]:
             rows.append({"Auction Team": tname, **p})
     si = io.StringIO()
-    writer = csv.DictWriter(si, fieldnames=rows[0].keys() if rows else [])
-    writer.writeheader(); writer.writerows(rows)
-    emit('download_csv', si.getvalue())
+    if rows:
+        writer = csv.DictWriter(si, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    filename = f"{team_filter.replace(' ', '_')}_squad.csv" if team_filter else "auction_summary.csv"
+    emit('download_csv', {'csv': si.getvalue(), 'filename': filename})
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
