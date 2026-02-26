@@ -267,41 +267,9 @@ def handle_next_player():
     if session.get('role') != 'auctioneer':
         emit('error', {'message': 'Only auctioneer can advance'})
         return
-
     player = current_player()
+    if not player: return
 
-    # If no player and still in LOTS, force phase switch
-    if not player and auction_state["phase"] == "LOTS":
-        auction_state["lot_idx"] += 1
-        auction_state["player_idx"] = 0
-
-        if auction_state["lot_idx"] >= len(auction_state["lots"]):
-            auction_state["phase"] = "UNSOLD"
-            auction_state["player_idx"] = 0
-
-        player = current_player()
-
-    # If still no player, check UNSOLD completion
-    if not player and auction_state["phase"] == "UNSOLD":
-        all_full = all(
-            len(t["players"]) >= TEAM_SIZE
-            for t in auction_state["teams"].values()
-        )
-
-        if all_full:
-            auction_state["ui_message"] = "Auction Completed - All Teams Full"
-            auction_state["ui_message_time"] = time.time()
-            broadcast_auction_update()
-            return
-        else:
-            auction_state["player_idx"] = 0
-            player = current_player()
-
-    if not player:
-        broadcast_auction_update()
-        return
-
-    # Save snapshot for undo
     auction_state["next_history"].append({
         "lot_idx": auction_state["lot_idx"],
         "player_idx": auction_state["player_idx"],
@@ -313,22 +281,45 @@ def handle_next_player():
         "unsold": copy.deepcopy(auction_state["unsold"])
     })
 
-    # Assign or move to unsold
     if auction_state["leader"]:
         assign_player(auction_state["leader"], player)
+        if auction_state["phase"] == "UNSOLD":
+            # Remove sold player from unsold list
+            auction_state["unsold"].pop(auction_state["player_idx"])
     else:
         if auction_state["phase"] == "LOTS":
             auction_state["unsold"].append(player)
             auction_state["ui_message"] = f"{player['Name']} moved to Unsold List"
             auction_state["ui_message_time"] = time.time()
+        # In UNSOLD phase, if nobody bids, player stays in unsold list — just advance index
 
-    # Reset bidding state
     auction_state["bid"] = 0
     auction_state["leader"] = None
     auction_state["history"] = []
 
-    # Move index forward
-    auction_state["player_idx"] += 1
+    if auction_state["phase"] == "LOTS":
+        auction_state["player_idx"] += 1
+        if auction_state["player_idx"] >= len(auction_state["lots"][auction_state["lot_idx"]]["data"]):
+            auction_state["lot_idx"] += 1
+            auction_state["player_idx"] = 0
+            if auction_state["lot_idx"] >= len(auction_state["lots"]):
+                # All lots done — move to unsold phase
+                auction_state["phase"] = "UNSOLD"
+                auction_state["player_idx"] = 0
+
+    else:  # UNSOLD phase
+        all_full = all(len(t["players"]) >= TEAM_SIZE for t in auction_state["teams"].values())
+        if all_full or len(auction_state["unsold"]) == 0:
+            auction_state["ui_message"] = "🏆 Auction Complete!"
+            auction_state["ui_message_time"] = time.time()
+        else:
+            # Cycle through unsold list, wrapping around
+            # If a player was sold (popped), index stays — points to next player naturally
+            # If player was skipped (nobody bid), advance index
+            if not auction_state["leader"]:  # nobody bought, advance
+                auction_state["player_idx"] += 1
+            if auction_state["player_idx"] >= len(auction_state["unsold"]):
+                auction_state["player_idx"] = 0  # wrap around, keep cycling
 
     broadcast_auction_update()
 
