@@ -100,6 +100,41 @@ def role_counts(team):
         counts[p["role"]] += 1
     return counts
 
+def warnings(team):
+    warns = []
+    rc = role_counts(team)
+    total_players = len(team["players"])
+    remaining_slots = TEAM_SIZE - total_players
+    bat = rc["Bat"]; bowl = rc["Bowl"]; ar = rc["AR"]; wk = rc["WK"]
+    uncapped = team["uncapped"]
+
+    if team["overseas"] == 5:
+        warns.append("⚠ Only 1 Overseas Slot Left")
+    if team["overseas"] == 6:
+        warns.append("Overseas Quota Filled")
+    if team["ipl"]:
+        if max(team["ipl"].values()) == 3:
+            warns.append("⚠ IPL Team Limit Near")
+        if max(team["ipl"].values()) >= 4:
+            warns.append("IPL Team Quota Filled")
+    if total_players >= 12 and uncapped == 0:
+        warns.append("⚠ Must Pick Uncapped Player")
+    if total_players == 14 and uncapped == 0:
+        warns.append("🚨 Final Slot Must Be Uncapped")
+
+    total_min_needed = (
+        max(0, ROLE_MIN["Bat"] - bat) + max(0, ROLE_MIN["Bowl"] - bowl) +
+        max(0, ROLE_MIN["AR"] - ar) + max(0, ROLE_MIN["WK"] - wk) +
+        max(0, 1 - uncapped)
+    )
+    if remaining_slots > 0 and total_min_needed == remaining_slots:
+        warns.append("🚨 Must Fill Specific Roles Only")
+    elif remaining_slots > 0 and total_min_needed == remaining_slots - 1:
+        warns.append("⚠ Role Combination Tight")
+    if total_min_needed > remaining_slots:
+        warns.append("❌ Squad Combination Impossible")
+    return warns
+
 def can_bid(team, player, team_name, leader):
     if team["purse"] < player["Base Price"]:
         return False, "Insufficient Purse"
@@ -181,7 +216,8 @@ def broadcast_auction_update():
             "overseas": t["overseas"],
             "uncapped": t["uncapped"],
             "roles": rc,
-            "is_leader": auction_state["leader"]==tname
+            "is_leader": auction_state["leader"]==tname,
+            "warnings": warnings(t) 
         })
 
     # Lot info with progress counter

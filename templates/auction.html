@@ -4,6 +4,9 @@
     <title>IPL Auction 2026</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
+        .team-warnings { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .warn-tag { font-size: 11px; padding: 3px 7px; border-radius: 4px; font-weight: bold;
+                    background: #4a2000; color: #ffb74d; border: 1px solid #ff9800; }
         body { font-family: Arial; margin: 0; padding: 20px; background:#1e1e1e; color:#f1f1f1; }
         .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .player-info, .bidding, .teams, .team-detail { border: 1px solid #555; padding: 20px; border-radius: 8px; background:#2c2c2c; }
@@ -271,6 +274,10 @@ function updateTeams(teams) {
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.Bowl/4,1)*100}%;">Bowl ${team.roles.Bowl}/4</div></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.AR/2,1)*100}%;">AR ${team.roles.AR}/2</div></div>
             <div class="progress-container"><div class="progress-bar" style="width:${Math.min(team.roles.WK/1,1)*100}%;">WK ${team.roles.WK}/1</div></div>
+            ${team.warnings && team.warnings.length > 0 ? `
+            <div class="team-warnings">
+                ${team.warnings.map(w => `<div class="warn-tag">${w}</div>`).join('')}
+            </div>` : ''}
             <button class="download-team-btn" onclick="downloadSummary('${team.name}')">💾 Download ${team.name}</button>
         `;
         container.appendChild(div);
